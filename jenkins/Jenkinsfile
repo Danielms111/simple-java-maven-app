@@ -1,30 +1,51 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.0'
-            args '-v /root/.m2:/root/.m2'
-        }
+    agent any
+    tools {
+        maven 'MAVEN'
+    }
+    parameters {
+        choice(
+            name: 'BRANCH', 
+            choices: ['master', 'testng'], 
+            description: 'Selecciona la rama que deseas compilar'
+        )
     }
     stages {
-        stage('Build') {
+        stage('Verificar y Clonar Repositorio') {
             steps {
-                sh 'mvn -B -DskipTests clean package'
-            }
-        }
-        stage('Test') {
-            steps {
-                sh 'mvn test'
-            }
-            post {
-                always {
-                    junit 'target/surefire-reports/*.xml'
+                script {
+                    def projectDir = 'simple-java-maven-app'
+                    if (fileExists(projectDir)) {
+                        echo "El proyecto ya existe. Eliminando carpeta..."
+                        deleteDir()
+                    }
+                    echo "Clonando repositorio desde GitHub, rama: ${params.BRANCH}..."
+                    git branch: params.BRANCH, url: 'https://github.com/Danielms111/simple-java-maven-app.git'
                 }
             }
         }
-        stage('Deliver') {
+        stage('Ejecutar Pruebas Unitarias') {
             steps {
-                sh './jenkins/scripts/deliver.sh'
+                echo 'Ejecutando pruebas unitarias con Maven...'
+                script {
+                    try {
+                        sh 'mvn test'
+                    } catch (Exception e) {
+                        echo 'Las pruebas unitarias fallaron.'
+                        currentBuild.result = 'FAILURE'
+                        throw e
+                    }
+                }
             }
         }
     }
+    post {
+        success {
+            echo 'Pipeline ejecutado con éxito. Las pruebas pasaron.'
+        }
+        failure {
+            echo 'El pipeline falló. Las pruebas no pasaron.'
+        }
+    }
 }
+
